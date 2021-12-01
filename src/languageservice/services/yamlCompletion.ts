@@ -17,7 +17,7 @@ import {
   Range,
   TextEdit,
 } from 'vscode-languageserver/node';
-import { Node, isPair, isScalar, isMap, YAMLMap, isSeq, YAMLSeq, isNode, Pair } from 'yaml';
+import { Node, isPair, isScalar, isMap, YAMLMap, isSeq, YAMLSeq, isNode, Pair, Document } from 'yaml';
 import { Telemetry } from '../../languageserver/telemetry';
 import { SingleYAMLDocument, YamlDocuments } from '../parser/yaml-documents';
 import { YamlVersion } from '../parser/yamlParser07';
@@ -35,6 +35,7 @@ import { setKubernetesParserOption } from '../parser/isKubernetes';
 import { isInComment, isMapContainsEmptyPair } from '../utils/astUtils';
 import { indexOf } from '../utils/astUtils';
 import { isModeline } from './modelineUtil';
+import { BlockMap, SourceToken } from 'yaml/dist/parse/cst';
 
 const localize = nls.loadMessageBundle();
 
@@ -65,7 +66,7 @@ export class YamlCompletion {
     private clientCapabilities: ClientCapabilities = {},
     private yamlDocument: YamlDocuments,
     private readonly telemetry: Telemetry
-  ) {}
+  ) { }
 
   configure(languageSettings: LanguageSettings): void {
     if (languageSettings) {
@@ -75,10 +76,16 @@ export class YamlCompletion {
     this.yamlVersion = languageSettings.yamlVersion;
     this.configuredIndentation = languageSettings.indentation;
   }
-
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   async doComplete(document: TextDocument, position: Position, isKubernetes = false): Promise<CompletionList> {
+    console.warn(`document`);
+    console.warn(document);
+    console.warn(`position`);
+    console.warn(`position`);
+    console.warn(position);
     const result = CompletionList.create([], false);
     if (!this.completionEnabled) {
+      console.warn(result);
       return result;
     }
     const doc = this.yamlDocument.getYamlDocument(document, { customTags: this.customTags, yamlVersion: this.yamlVersion }, true);
@@ -96,11 +103,13 @@ export class YamlCompletion {
     const offset = document.offsetAt(position);
 
     if (document.getText().charAt(offset - 1) === ':') {
+      console.warn(result);
       return Promise.resolve(result);
     }
 
     const currentDoc = matchOffsetToDocument(offset, doc);
     if (currentDoc === null) {
+      console.warn(result);
       return Promise.resolve(result);
     }
 
@@ -136,6 +145,7 @@ export class YamlCompletion {
         if (!label) {
           // we receive not valid CompletionItem as `label` is mandatory field, so just ignore it
           console.warn(`Ignoring CompletionItem without label: ${JSON.stringify(completionItem)}`);
+          console.warn(result);
           return;
         }
         if (!isString(label)) {
@@ -166,6 +176,7 @@ export class YamlCompletion {
         console.log(message);
       },
       getNumberOfProposals: () => {
+        console.warn(result);
         return result.items.length;
       },
     };
@@ -209,10 +220,12 @@ export class YamlCompletion {
             result.items.push(schemaIdCompletion);
           });
         }
+        console.warn(result);
         return result;
       }
 
       if (!schema || schema.errors.length) {
+        console.warn(result);
         return result;
       }
 
@@ -392,8 +405,61 @@ export class YamlCompletion {
       this.telemetry.sendError('yaml.completion.error', { error: err });
     }
 
+    //ポートタイプのところにいたら、タイプの候補
+    var arr = [];
+    if (lineContent.match(/PortType/) && result.items.length == 0) {
+      if (doc.tokens[0].type === `document`) { //型チェック
+        if (doc.tokens[0].value.type === `block-map`) { // 型チェック
+          for (let temp_item of doc.tokens[0].value.items) {
+            if (temp_item.key.type === `scalar`) { //型チェック
+              if (temp_item.key.source === "Types" && temp_item.value.type == `block-seq`) {
+                console.warn(temp_item.value.items);
+                console.warn(temp_item.value.items.length);
+                for (let internal_type_def of temp_item.value.items) {
+                  console.warn(internal_type_def);
+                  if (internal_type_def.value.type === `block-map`) {  //型チェック
+                    for (let internal_type of internal_type_def.value.items) {
+                      if (internal_type.key.type === "scalar" && internal_type.value.type === "scalar") {//型チェック
+                        if (internal_type.key.source === "Name") {
+                          result.items.push({
+                            kind: CompletionItemKind.Enum,
+                            label: internal_type.value.source,
+                            insertText: internal_type.value.source,
+                            insertTextFormat: InsertTextFormat.PlainText,
+                            documentation: '',
+                          })
+                          break
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      console.warn(arr)
+      const path = "C:/git/yaml/vscode-yaml/sample/zzz.tam.yml"
+      const fs = require('fs');
+      const context = fs.readFileSync(path, 'utf-8');
+      const document2 = TextDocument.create(path, 'yaml', 1, context)
+      const doc2 = this.yamlDocument.getYamlDocument(document2, { customTags: this.customTags, yamlVersion: this.yamlVersion }, true);
+      console.warn(doc2)
+      //for (let typeItem of doc.tokens[0].value.items[4].value.items){
+
+      //}
+    }
+    //コネクテッドポートのところにいたら、補完する
+
+    console.warn(typeof (doc.tokens[0]));
+    console.warn('last');
+    console.warn(result);
     return result;
   }
+
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   private createTempObjNode(currentWord: string, node: Node, currentDoc: SingleYAMLDocument): YAMLMap {
     const obj = {};
@@ -475,9 +541,8 @@ export class YamlCompletion {
                       collector.add({
                         kind: this.getSuggestionKind(propertySchema.items.type),
                         label: '- (array item)',
-                        documentation: `Create an item of an array${
-                          propertySchema.description === undefined ? '' : '(' + propertySchema.description + ')'
-                        }`,
+                        documentation: `Create an item of an array${propertySchema.description === undefined ? '' : '(' + propertySchema.description + ')'
+                          }`,
                         insertText: `- ${this.getInsertTextForObject(
                           propertySchema.items,
                           separatorAfter,
@@ -602,9 +667,8 @@ export class YamlCompletion {
                 collector.add({
                   kind: this.getSuggestionKind(s.schema.items.type),
                   label: '- (array item)',
-                  documentation: `Create an item of an array${
-                    s.schema.description === undefined ? '' : '(' + s.schema.description + ')'
-                  }`,
+                  documentation: `Create an item of an array${s.schema.description === undefined ? '' : '(' + s.schema.description + ')'
+                    }`,
                   insertText: `- ${this.getInsertTextForObject(s.schema.items, separatorAfter, '  ').insertText.trimLeft()}`,
                   insertTextFormat: InsertTextFormat.Snippet,
                 });
@@ -716,9 +780,8 @@ export class YamlCompletion {
       if (propertySchema.properties) {
         return `${resultText}\n${this.getInsertTextForObject(propertySchema, separatorAfter, ident).insertText}`;
       } else if (propertySchema.items) {
-        return `${resultText}\n${this.indentation}- ${
-          this.getInsertTextForArray(propertySchema.items, separatorAfter).insertText
-        }`;
+        return `${resultText}\n${this.indentation}- ${this.getInsertTextForArray(propertySchema.items, separatorAfter).insertText
+          }`;
       }
       if (nValueProposals === 0) {
         switch (type) {
