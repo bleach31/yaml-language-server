@@ -35,7 +35,7 @@ import { setKubernetesParserOption } from '../parser/isKubernetes';
 import { isInComment, isMapContainsEmptyPair } from '../utils/astUtils';
 import { indexOf } from '../utils/astUtils';
 import { isModeline } from './modelineUtil';
-import { BlockMap, SourceToken } from 'yaml/dist/parse/cst';
+import { BlockMap, SourceToken, Token } from 'yaml/dist/parse/cst';
 
 const localize = nls.loadMessageBundle();
 
@@ -405,31 +405,59 @@ export class YamlCompletion {
       this.telemetry.sendError('yaml.completion.error', { error: err });
     }
 
-    //ポートタイプのところにいたら、タイプの候補
-    var arr = [];
+    //ポートタイプのところにいたら、Typeの候補
     if (lineContent.match(/PortType/) && result.items.length == 0) {
-      if (doc.tokens[0].type === `document`) { //型チェック
-        if (doc.tokens[0].value.type === `block-map`) { // 型チェック
-          for (let temp_item of doc.tokens[0].value.items) {
-            if (temp_item.key.type === `scalar`) { //型チェック
-              if (temp_item.key.source === "Types" && temp_item.value.type == `block-seq`) {
-                console.warn(temp_item.value.items);
-                console.warn(temp_item.value.items.length);
-                for (let internal_type_def of temp_item.value.items) {
-                  console.warn(internal_type_def);
-                  if (internal_type_def.value.type === `block-map`) {  //型チェック
-                    for (let internal_type of internal_type_def.value.items) {
-                      if (internal_type.key.type === "scalar" && internal_type.value.type === "scalar") {//型チェック
-                        if (internal_type.key.source === "Name") {
-                          result.items.push({
-                            kind: CompletionItemKind.Enum,
-                            label: internal_type.value.source,
-                            insertText: internal_type.value.source,
-                            insertTextFormat: InsertTextFormat.PlainText,
-                            documentation: '',
-                          })
-                          break
-                        }
+      let documentPath = document.uri.replace(/^file:\/\/\/([a-z])%3A/, "$1:");
+      this.addAllTypes(doc.tokens[0], documentPath, "Types", result)
+    }
+    //コネクテッドポートのところにいたら、OutputPortの候補
+    if (lineContent.match(/ConnectedPort/) && result.items.length == 0) {
+      let documentPath = document.uri.replace(/^file:\/\/\/([a-z])%3A/, "$1:");
+      this.addAllTypes(doc.tokens[0], documentPath, "OutputPorts", result)
+    }
+
+    console.warn(typeof (doc.tokens[0]));
+    console.warn('last');
+    console.warn(result);
+    return result;
+  }
+  private addAllTypes(doc: Token, currentPath: string, key: String, result: CompletionList): void {
+    this.addNames(doc, key, result, "")
+    // Loading another files
+    let fs = require('fs');
+    let glob = require('glob');
+    let path = require('path');
+    let othersList = glob.sync(path.dirname(currentPath) + '/*.tam.yml');
+    for (let otherPath of othersList) {
+      let context = fs.readFileSync(otherPath, 'utf-8');
+      let documentOther = TextDocument.create(otherPath, 'yaml', 1, context)
+      this.yamlDocument.clear()
+      let docOther = this.yamlDocument.getYamlDocument(documentOther, { customTags: this.customTags, yamlVersion: this.yamlVersion }, true);
+      this.addNames(docOther.tokens[0], key, result, path.basename(otherPath, '.tam.yml') + "/");
+    }
+  }
+  private addNames(document: Token, key: String, result: CompletionList, prefix: String): void {
+    if (document.type === `document`) { //型チェック
+      if (document.value.type === `block-map`) { // 型チェック
+        for (let temp_item of document.value.items) {
+          if (temp_item.key.type === `scalar`) { //型チェック
+            if (temp_item.key.source === key && temp_item.value.type == `block-seq`) {
+              console.warn(temp_item.value.items);
+              console.warn(temp_item.value.items.length);
+              for (let internal_type_def of temp_item.value.items) {
+                console.warn(internal_type_def);
+                if (internal_type_def.value.type === `block-map`) {  //型チェック
+                  for (let internal_type of internal_type_def.value.items) {
+                    if (internal_type.key.type === "scalar" && internal_type.value.type === "scalar") {//型チェック
+                      if (internal_type.key.source === "Name") {
+                        result.items.push({
+                          kind: CompletionItemKind.Enum,
+                          label: prefix + internal_type.value.source,
+                          insertText: prefix + internal_type.value.source,
+                          insertTextFormat: InsertTextFormat.PlainText,
+                          documentation: '',
+                        })
+                        break
                       }
                     }
                   }
@@ -439,23 +467,7 @@ export class YamlCompletion {
           }
         }
       }
-      console.warn(arr)
-      const path = "C:/git/yaml/vscode-yaml/sample/zzz.tam.yml"
-      const fs = require('fs');
-      const context = fs.readFileSync(path, 'utf-8');
-      const document2 = TextDocument.create(path, 'yaml', 1, context)
-      const doc2 = this.yamlDocument.getYamlDocument(document2, { customTags: this.customTags, yamlVersion: this.yamlVersion }, true);
-      console.warn(doc2)
-      //for (let typeItem of doc.tokens[0].value.items[4].value.items){
-
-      //}
     }
-    //コネクテッドポートのところにいたら、補完する
-
-    console.warn(typeof (doc.tokens[0]));
-    console.warn('last');
-    console.warn(result);
-    return result;
   }
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
