@@ -78,11 +78,10 @@ export class YamlCompletion {
   }
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   async doComplete(document: TextDocument, position: Position, isKubernetes = false): Promise<CompletionList> {
-    console.warn(`document`);
-    console.warn(document);
-    console.warn(`position`);
-    console.warn(`position`);
-    console.warn(position);
+    //console.warn(`document`);
+    //console.warn(document);
+    //console.warn(`position`);
+    //console.warn(position);
     const result = CompletionList.create([], false);
     if (!this.completionEnabled) {
       console.warn(result);
@@ -408,44 +407,49 @@ export class YamlCompletion {
     //ポートタイプのところにいたら、Typeの候補
     if (lineContent.match(/PortType/) && result.items.length == 0) {
       let documentPath = document.uri.replace(/^file:\/\/\/([a-z])%3A/, "$1:");
-      this.addAllTypes(doc.tokens[0], documentPath, "Types", result)
+      this.addAllFileKeyCompletionList(doc.tokens[0], documentPath, "Types", result)
     }
     //コネクテッドポートのところにいたら、OutputPortの候補
     if (lineContent.match(/ConnectedPort/) && result.items.length == 0) {
       let documentPath = document.uri.replace(/^file:\/\/\/([a-z])%3A/, "$1:");
-      this.addAllTypes(doc.tokens[0], documentPath, "OutputPorts", result)
+      this.addAllFileKeyCompletionList(doc.tokens[0], documentPath, "OutputPorts", result)
     }
 
-    console.warn(typeof (doc.tokens[0]));
-    console.warn('last');
-    console.warn(result);
+    //console.warn(typeof (doc.tokens[0]));
+    //console.warn('last');
+    //console.warn(result);
     return result;
   }
-  private addAllTypes(doc: Token, currentPath: string, key: String, result: CompletionList): void {
-    this.addNames(doc, key, result, "")
+  private addAllFileKeyCompletionList(doc: Token, currentPath: string, key: String, result: CompletionList): void {
     // Loading another files
     let fs = require('fs');
     let glob = require('glob');
     let path = require('path');
-    let othersList = glob.sync(path.dirname(currentPath) + '/*.tam.yml');
-    for (let otherPath of othersList) {
-      let context = fs.readFileSync(otherPath, 'utf-8');
-      let documentOther = TextDocument.create(otherPath, 'yaml', 1, context)
-      this.yamlDocument.clear()
-      let docOther = this.yamlDocument.getYamlDocument(documentOther, { customTags: this.customTags, yamlVersion: this.yamlVersion }, true);
-      this.addNames(docOther.tokens[0], key, result, path.basename(otherPath, '.tam.yml') + "/");
+    let allFileList = glob.sync(path.dirname(currentPath) + '/*.tam.yml');
+    let currentName = path.basename(currentPath, '.tam.yml')
+    for (let filePath of allFileList) {
+      let context = fs.readFileSync(filePath, 'utf-8');
+      let documentOther = TextDocument.create(filePath, 'yaml', 1, context)
+      let yamlDocument = new YamlDocuments();
+      let docOther = yamlDocument.getYamlDocument(documentOther, { customTags: this.customTags, yamlVersion: this.yamlVersion }, true);
+
+      let fileName = path.basename(filePath, '.tam.yml')
+      if (fileName == currentName)
+        this.addKeyCompletionList(docOther.tokens[0], key, result, "");
+      else
+        this.addKeyCompletionList(docOther.tokens[0], key, result, fileName + "/");
     }
   }
-  private addNames(document: Token, key: String, result: CompletionList, prefix: String): void {
+  private addKeyCompletionList(document: Token, key: String, result: CompletionList, prefix: String): void {
     if (document.type === `document`) { //型チェック
       if (document.value.type === `block-map`) { // 型チェック
         for (let temp_item of document.value.items) {
           if (temp_item.key.type === `scalar`) { //型チェック
             if (temp_item.key.source === key && temp_item.value.type == `block-seq`) {
-              console.warn(temp_item.value.items);
-              console.warn(temp_item.value.items.length);
+              //console.warn(temp_item.value.items);
+              //console.warn(temp_item.value.items.length);
               for (let internal_type_def of temp_item.value.items) {
-                console.warn(internal_type_def);
+                //console.warn(internal_type_def);
                 if (internal_type_def.value.type === `block-map`) {  //型チェック
                   for (let internal_type of internal_type_def.value.items) {
                     if (internal_type.key.type === "scalar" && internal_type.value.type === "scalar") {//型チェック

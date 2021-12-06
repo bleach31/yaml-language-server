@@ -15,7 +15,11 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { JSONValidation } from 'vscode-json-languageservice/lib/umd/services/jsonValidation';
 import { YAML_SOURCE } from '../parser/jsonParser07';
 import { TextBuffer } from '../utils/textBuffer';
-import { yamlDocumentsCache } from '../parser/yaml-documents';
+import { yamlDocumentsCache, YamlDocuments } from '../parser/yaml-documents';
+import { NODE_TYPE } from 'yaml/dist/nodes/Node';
+import { AnyRecord } from 'dns';
+import { Token } from 'yaml/dist/parse/cst';
+
 
 /**
  * Convert a YAMLDocDiagnostic to a language server Diagnostic
@@ -71,13 +75,20 @@ export class YAMLValidation {
       );
 
       let index = 0;
+      //////////////////////////////////////////////////////////////////////////////////
+      // 検証用リスト作成
+      let outPortArray: Array<string> = [];
+      let typeArray: Array<string> = [];
+      let documentPath = textDocument.uri.replace(/^file:\/\/\/([a-z])%3A/, "$1:");
+      this.addAllFileKey(documentPath, "OutputPorts", outPortArray)
+      this.addAllFileKey(documentPath, "Types", typeArray)
+      //////////////////////////////////////////////////////////////////////////////////
+
       for (const currentYAMLDoc of yamlDocument.documents) {
         currentYAMLDoc.isKubernetes = isKubernetes;
         currentYAMLDoc.currentDocIndex = index;
         currentYAMLDoc.disableAdditionalProperties = this.disableAdditionalProperties;
-
         const validation = await this.jsonValidation.doValidation(textDocument, currentYAMLDoc);
-
         const syd = (currentYAMLDoc as unknown) as SingleYAMLDocument;
         if (syd.errors.length > 0) {
           // TODO: Get rid of these type assertions (shouldn't need them)
@@ -86,14 +97,48 @@ export class YAMLValidation {
         if (syd.warnings.length > 0) {
           validationResult.push(...syd.warnings);
         }
-
+        //////////////////////////////////////////////////////////////////////////////////
+        //ポート
+        let children = currentYAMLDoc.root.children;
+        for (let ent1 of children.entries()) {
+          let ent1any = ent1[1] as any
+          if (ent1any.keyNode.value == "InputPorts") {
+            for (let ent2 of ent1[1].children.entries()) {
+              let ent2any = ent2[1] as any
+              for (let ent2kvs of ent2any.parent.internalNode.value.items[0].items) {
+                if (ent2kvs.key.source == "ConnectedPort") {
+                  //console.warn(ent2kvs.value.source) // 検証対象
+                  if (!outPortArray.includes(ent2kvs.value.source))
+                    validationResult.push(this.makeTammodDiagnostics("未定義のポートです:" + ent2kvs.value.source, ent2kvs.value.range[0], ent2kvs.value.range[2]))
+                }
+              }
+            }
+          }
+        }
+        //////////////////////////////////////////////////////////////////////////////////
+        //タイプ
+        for (let ent1 of children.entries()) {
+          let ent1any = ent1[1] as any
+          if (ent1any.keyNode.value == "InputPorts" || ent1any.keyNode.value == "OutputPorts") {
+            for (let ent2 of ent1[1].children.entries()) {
+              let ent2any = ent2[1] as any
+              for (let ent2kvs of ent2any.parent.internalNode.value.items[0].items) {
+                if (ent2kvs.key.source == "PortType") {
+                  //console.warn(ent2kvs.value.source) // 検証対象
+                  if (!typeArray.includes(ent2kvs.value.source))
+                    validationResult.push(this.makeTammodDiagnostics("未定義の型です:" + ent2kvs.value.source, ent2kvs.value.range[0], ent2kvs.value.range[2]))
+                }
+              }
+            }
+          }
+        }
+        //////////////////////////////////////////////////////////////////////////////////
         validationResult.push(...validation);
         index++;
       }
     } catch (err) {
       console.error(err.toString());
     }
-
     let previousErr: Diagnostic;
     const foundSignatures = new Set();
     const duplicateMessagesRemoved: Diagnostic[] = [];
@@ -136,4 +181,67 @@ export class YAMLValidation {
 
     return duplicateMessagesRemoved;
   }
+  /////////////////////////////////////////////////////////
+  // 新しい関数
+  private makeTammodDiagnostics(message: string, start: number, end: number): YAMLDocDiagnostic {
+    return {
+      message: message,
+      location: {
+        start: start,
+        end: end,
+        toLineEnd: true,
+      },
+      severity: 1,
+      code: 1, // ErrorCode.EnumValueMismatch 
+    };
+  }
+  private addAllFileKey(currentPath: string, key: String, result: Array<string>): void {
+    // Loading another files
+    let fs = require('fs');
+    let glob = require('glob');
+    let path = require('path');
+    let allFileList = glob.sync(path.dirname(currentPath) + '/*.tam.yml');
+    let currentName = path.basename(currentPath, '.tam.yml')
+    for (let filePath of allFileList) {
+      let context = fs.readFileSync(filePath, 'utf-8');
+      let documentOther = TextDocument.create(filePath, 'yaml', 1, context)
+      let yamlDocument = new YamlDocuments();
+      let docOther = yamlDocument.getYamlDocument(documentOther, { customTags: this.customTags, yamlVersion: this.yamlVersion }, true);
+
+      let fileName = path.basename(filePath, '.tam.yml')
+      if (fileName == currentName)
+        this.addKey(docOther.tokens[0], key, result, "");
+      else
+        this.addKey(docOther.tokens[0], key, result, fileName + "/");
+    }
+  }
+  private addKey(document: Token, key: String, result: Array<string>, prefix: String): void {
+    if (document.type === `document`) { //型チェック
+      if (document.value.type === `block-map`) { // 型チェック
+        for (let temp_item of document.value.items) {
+          if (temp_item.key.type === `scalar`) { //型チェック
+            if (temp_item.key.source === key && temp_item.value.type == `block-seq`) {
+              console.warn(temp_item.value.items);
+              console.warn(temp_item.value.items.length);
+              for (let internal_type_def of temp_item.value.items) {
+                console.warn(internal_type_def);
+                if (internal_type_def.value.type === `block-map`) {  //型チェック
+                  for (let internal_type of internal_type_def.value.items) {
+                    if (internal_type.key.type === "scalar" && internal_type.value.type === "scalar") {//型チェック
+                      if (internal_type.key.source === "Name") {
+
+                        result.push(prefix + internal_type.value.source)
+                        break
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  /////////////////////////////////////////////////////////
 }
