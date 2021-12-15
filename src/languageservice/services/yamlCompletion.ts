@@ -78,7 +78,7 @@ export class YamlCompletion {
   }
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   async doComplete(document: TextDocument, position: Position, isKubernetes = false): Promise<CompletionList> {
-    //console.warn(`document`);
+    console.warn(`doComplete`);
     //console.warn(document);
     //console.warn(`position`);
     //console.warn(position);
@@ -404,14 +404,37 @@ export class YamlCompletion {
       this.telemetry.sendError('yaml.completion.error', { error: err });
     }
 
+    console.warn(`right_before_our_feature`);
     //ポートタイプのところにいたら、Typeの候補
     if (lineContent.match(/PortType/) && result.items.length == 0) {
-      let documentPath = document.uri.replace(/^file:\/\/\/([a-z])%3A/, "$1:");
+      let documentPath = ""
+      if (document.uri.includes("%3A")) {
+        console.warn(`windows`);
+        documentPath = document.uri.replace(/^file:\/\/\/([a-z])%3A/, "$1:");
+      }
+      else {
+        console.warn(`linux`);
+        documentPath = document.uri.replace(/^file:\/\//, "");
+      }
+      console.warn(`document uri,path`);
+      console.warn(document.uri);
+      console.warn(documentPath);
       this.addAllFileKeyCompletionList(doc.tokens[0], documentPath, "Types", result)
     }
     //コネクテッドポートのところにいたら、OutputPortの候補
     if (lineContent.match(/ConnectedPort/) && result.items.length == 0) {
-      let documentPath = document.uri.replace(/^file:\/\/\/([a-z])%3A/, "$1:");
+      let documentPath = ""
+      if (document.uri.includes("%3A")) {
+        console.warn(`windows`);
+        documentPath = document.uri.replace(/^file:\/\/\/([a-z])%3A/, "$1:");
+      }
+      else {
+        console.warn(`linux`);
+        documentPath = document.uri.replace(/^file:\/\//, "");
+      }
+      console.warn(`document uri,path`);
+      console.warn(document.uri);
+      console.warn(documentPath);
       this.addAllFileKeyCompletionList(doc.tokens[0], documentPath, "OutputPorts", result)
     }
 
@@ -426,8 +449,15 @@ export class YamlCompletion {
     let glob = require('glob');
     let path = require('path');
     let allFileList = glob.sync(path.dirname(currentPath) + '/*.tam.yml');
+    console.warn(`grep Path`);
+    console.warn(path.dirname(currentPath) + '/*.tam.yml');
+
     let currentName = path.basename(currentPath, '.tam.yml')
     for (let filePath of allFileList) {
+
+      console.warn(`filePath`);
+      console.warn(filePath);
+
       let context = fs.readFileSync(filePath, 'utf-8');
       let documentOther = TextDocument.create(filePath, 'yaml', 1, context)
       let yamlDocument = new YamlDocuments();

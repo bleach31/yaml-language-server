@@ -79,7 +79,15 @@ export class YAMLValidation {
       // 検証用リスト作成
       let outPortArray: Array<string> = [];
       let typeArray: Array<string> = [];
-      let documentPath = textDocument.uri.replace(/^file:\/\/\/([a-z])%3A/, "$1:");
+      let documentPath = ""
+      if (textDocument.uri.includes("%3A")) {
+        console.warn(`windows`);
+        documentPath = textDocument.uri.replace(/^file:\/\/\/([a-z])%3A/, "$1:");
+      }
+      else {
+        console.warn(`linux`);
+        documentPath = textDocument.uri.replace(/^file:\/\//, "");
+      }
       this.addAllFileKey(documentPath, "OutputPorts", outPortArray)
       this.addAllFileKey(documentPath, "Types", typeArray)
       //////////////////////////////////////////////////////////////////////////////////
@@ -108,8 +116,8 @@ export class YAMLValidation {
               for (let ent2kvs of ent2any.parent.internalNode.value.items[0].items) {
                 if (ent2kvs.key.source == "ConnectedPort") {
                   //console.warn(ent2kvs.value.source) // 検証対象
-                  if (!outPortArray.includes(ent2kvs.value.source))
-                    validationResult.push(this.makeTammodDiagnostics("未定義のポートです:" + ent2kvs.value.source, ent2kvs.value.range[0], ent2kvs.value.range[2]))
+                  if (!outPortArray.includes(ent2kvs.value.source)) { ; }
+                  // validationResult.push(this.makeTammodDiagnostics("未定義のポートです:" + ent2kvs.value.source, ent2kvs.value.range[0], ent2kvs.value.range[2]))
                 }
               }
             }
@@ -125,8 +133,8 @@ export class YAMLValidation {
               for (let ent2kvs of ent2any.parent.internalNode.value.items[0].items) {
                 if (ent2kvs.key.source == "PortType") {
                   //console.warn(ent2kvs.value.source) // 検証対象
-                  if (!typeArray.includes(ent2kvs.value.source))
-                    validationResult.push(this.makeTammodDiagnostics("未定義の型です:" + ent2kvs.value.source, ent2kvs.value.range[0], ent2kvs.value.range[2]))
+                  if (!typeArray.includes(ent2kvs.value.source)) { ; }
+                  // validationResult.push(this.makeTammodDiagnostics("未定義の型です:" + ent2kvs.value.source, ent2kvs.value.range[0], ent2kvs.value.range[2]))
                 }
               }
             }
