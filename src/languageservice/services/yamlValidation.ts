@@ -116,8 +116,9 @@ export class YAMLValidation {
               for (let ent2kvs of ent2any.parent.internalNode.value.items[0].items) {
                 if (ent2kvs.key.source == "ConnectedPort") {
                   //console.warn(ent2kvs.value.source) // 検証対象
-                  if (!outPortArray.includes(ent2kvs.value.source)) { ; }
-                  // validationResult.push(this.makeTammodDiagnostics("未定義のポートです:" + ent2kvs.value.source, ent2kvs.value.range[0], ent2kvs.value.range[2]))
+                  if (!outPortArray.includes(ent2kvs.value.source)) {
+                    validationResult.push(this.makeTammodDiagnostics("未定義のポートです:" + ent2kvs.value.source, ent2kvs.value.range[0], ent2kvs.value.range[2]))
+                  }
                 }
               }
             }
@@ -133,8 +134,9 @@ export class YAMLValidation {
               for (let ent2kvs of ent2any.parent.internalNode.value.items[0].items) {
                 if (ent2kvs.key.source == "PortType") {
                   //console.warn(ent2kvs.value.source) // 検証対象
-                  if (!typeArray.includes(ent2kvs.value.source)) { ; }
-                  // validationResult.push(this.makeTammodDiagnostics("未定義の型です:" + ent2kvs.value.source, ent2kvs.value.range[0], ent2kvs.value.range[2]))
+                  if (!typeArray.includes(ent2kvs.value.source)) {
+                    validationResult.push(this.makeTammodDiagnostics("未定義の型です:" + ent2kvs.value.source, ent2kvs.value.range[0], ent2kvs.value.range[2]))
+                  }
                 }
               }
             }
